@@ -1,7 +1,7 @@
 # DigiShop — дизайн-документ
 
 Дата: 2026-08-12
-Статус: утверждён пользователем (секции 1–5), готов к планированию
+Статус: утверждён пользователем, прошёл спек-ревью, готов к планированию
 
 ## 1. Что это
 
@@ -22,7 +22,9 @@ DigiShop — магазин цифровых товаров (демо-товар
 
 ### Не входит в MVP (этап 2, по остатку времени)
 
-Админ-панель на React (товары заводятся seed-скриптом/через API), возвраты, промокоды, отзывы, второй OAuth-провайдер, реальная отправка email (Resend), S3-хранилище файлов.
+Возвраты, промокоды, отзывы, второй OAuth-провайдер, реальная отправка email (Resend), S3-хранилище файлов. Админ-панели в MVP нет — товары заводятся seed-скриптом/через API.
+
+**Этап 2, пункт первый — Django-админка** (~2–4 дня, по явному запросу пользователя — закрыть пробел «Django» в резюме): отдельный сервис-«бэк-офис» на Django поверх той же PostgreSQL — готовая админка для товаров, категорий и просмотра заказов. Владелец схемы — Alembic; Django-модели описываются с `managed=False` (читают таблицы, миграциями не управляют). В docker-compose добавляется шестым сервисом, на Render — отдельным free-сервисом (админке можно «спать»). Публичный API остаётся на FastAPI; связка «FastAPI для публичного API + Django для бэк-офиса» — реальный продакшн-паттерн и сильный ответ на собеседовании.
 
 ## 2. Архитектура и хостинг (строго бесплатно)
 
@@ -46,9 +48,10 @@ Upstash-нюанс: Celery настраивается на редкий опро
 - **User**: id, email, password_hash (nullable — у Google-пользователей пароля нет), google_id (nullable, unique), created_at.
 - **Category**: id, name, slug.
 - **Product**: id, category_id, name, slug, description, price (integer, центы — деньги никогда не float), image_url, file_key, is_active.
-- **Order**: id, user_id, status, total, stripe_session_id, created_at. Статусная машина: `pending → paid → delivered`, `pending → failed`. Переходы только по разрешённой схеме.
+- **Order**: id, user_id, status, total, provider (`stripe`), payment_session_id, created_at. Имена колонок провайдеро-независимые — чтобы LiqPay лёг в ту же схему. Статусная машина: `pending → paid → delivered`, `pending → failed`. Переходы только по разрешённой схеме.
 - **OrderItem**: order_id, product_id, price_at_purchase (цена фиксируется на момент покупки).
-- **DownloadLink**: order_item_id, token (uuid), expires_at, download_count. Скачивание только по временной токен-ссылке.
+- **DownloadLink**: order_item_id, token (uuid), expires_at, download_count. Скачивание только по временной токен-ссылке; download_count — информационный счётчик (жёсткого лимита скачиваний в MVP нет).
+- **Notification**: id, user_id, order_id, type, payload (json), created_at — сюда `deliver_order` пишет «отправленные письма» в MVP; при подключении реальной почты (этап 2) таблица становится логом отправки.
 
 Корзина в БД не хранится — живёт на фронте (Zustand + localStorage). Сервер видит корзину в момент `POST /orders`, где перевалидирует цены по БД.
 
@@ -77,7 +80,7 @@ backend/
 ## 5. Auth
 
 - Email+пароль: bcrypt-хэш, JWT (access-токен) в заголовке Authorization.
-- **Google OAuth2** через authlib: редирект-флоу, по callback создаём/находим User по google_id/email, выдаём тот же JWT. Один провайдер в MVP — второй ничему новому не учит.
+- **Google OAuth2** через authlib: редирект-флоу, по callback создаём/находим User по google_id/email. Передача JWT в SPA после кросс-доменного редиректа — через **одноразовый код**: callback кладёт JWT в Redis под коротким кодом (TTL 60 сек) и редиректит на фронт с `?code=...`; SPA обменивает код на JWT запросом `POST /auth/exchange` (код одноразовый — удаляется при обмене). Токен не светится в URL/истории браузера — и это ещё одно применение Redis. Один OAuth-провайдер в MVP — второй ничему новому не учит.
 - Rate limiting на `/auth/login` и `/auth/register` через Redis (защита от перебора).
 
 ## 6. Платёжный флоу, Celery, Redis
@@ -93,9 +96,9 @@ backend/
 
 ### Celery-задачи
 
-- `deliver_order(order_id)`: генерирует DownloadLink'и, «отправляет письмо» (MVP: лог + запись в БД), переводит заказ в `delivered`. Retry с экспоненциальной задержкой, max 5 попыток; после исчерпания заказ остаётся `paid` с флагом ошибки в логах/Sentry.
+- `deliver_order(order_id)`: генерирует DownloadLink'и, «отправляет письмо» (MVP: запись в таблицу Notification + лог), переводит заказ в `delivered`. Retry с экспоненциальной задержкой, max 5 попыток; после исчерпания заказ остаётся `paid` с флагом ошибки в логах/Sentry.
 - `expire_pending_orders()` (beat, периодическая): `pending` старше 1 часа → `failed`.
-- `cleanup_expired_links()` (beat): деактивация протухших DownloadLink.
+- `cleanup_expired_links()` (beat): удаляет DownloadLink с истёкшим `expires_at` (эндпоинт скачивания и сам отвергает протухший токен — задача лишь чистит мусор).
 
 ### Redis (Upstash) — три роли
 
