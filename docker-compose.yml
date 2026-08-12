@@ -5,7 +5,7 @@ services:
       POSTGRES_USER: digishop
       POSTGRES_PASSWORD: digishop
       POSTGRES_DB: digishop
-    ports: ["5432:5432"]
+    ports: ["5433:5432"]  # 5432 на хосте занят postgres'ом другого проекта
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U digishop"]
