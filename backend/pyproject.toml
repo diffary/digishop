@@ -12,6 +12,7 @@ dependencies = [
     "pyjwt>=2.9",
     "bcrypt>=4.2",
     "redis>=5.0",
+    "pydantic[email]>=2.13.4",
 ]
 
 [dependency-groups]
