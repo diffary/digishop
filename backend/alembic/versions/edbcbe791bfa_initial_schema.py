@@ -112,4 +112,6 @@ def downgrade() -> None:
     op.drop_table('users')
     op.drop_index(op.f('ix_categories_slug'), table_name='categories')
     op.drop_table('categories')
+    # autogenerate не удаляет enum-типы Postgres — без этого повторный upgrade после отката падает
+    sa.Enum(name='orderstatus').drop(op.get_bind(), checkfirst=True)
     # ### end Alembic commands ###
