@@ -371,8 +371,8 @@ class User(Base):
 
 - [ ] **Step 4: Alembic**
 
-Run: `uv run alembic init alembic`
-В `alembic/env.py`: target_metadata = `Base.metadata`, url из `Settings` (sync-вариант: заменить `+asyncpg` на пустую строку не надо — использовать async engine template: `uv run alembic init -t async alembic`). Использовать **async-шаблон**.
+Run: `uv run alembic init -t async alembic` (сразу async-шаблон)
+В `alembic/env.py`: `target_metadata = Base.metadata`, url подставлять из `Settings().database_url`.
 Run: `uv run alembic revision --autogenerate -m "initial schema"` (нужен запущенный postgres из compose)
 Run: `uv run alembic upgrade head`
 Expected: 7 таблиц в postgres (`docker compose exec postgres psql -U digishop -c '\dt'`)
@@ -391,6 +391,8 @@ Expected: 7 таблиц в postgres (`docker compose exec postgres psql -U digi
 - [ ] **Step 1: Тестовая инфраструктура — БД-фикстура**
 
 Дополнить `conftest.py`: engine на `sqlite+aiosqlite://` (in-memory, StaticPool), `Base.metadata.create_all`, переопределение зависимости `get_session` через `app.dependency_overrides`. Env-переменные для Settings задаются в `conftest.py` через `os.environ.setdefault` (JWT_SECRET=test и т.д.) до импорта app.
+
+**Важно:** уже здесь добавить фикстуру `fake_redis` (fakeredis.aioredis.FakeRedis) и её override **в базовую `client`-фикстуру**, а не подключать точечно в отдельных тестах — после Task 8 rate-limit повиснет на auth-эндпоинтах, и тесты auth без подменённого Redis полезут в настоящий (которого в CI нет).
 
 - [ ] **Step 2: Падающие тесты**
 
@@ -532,6 +534,8 @@ async def invalidate_catalog(redis):
 
 В `api/products.py` list/detail оборачиваются в `get_or_set` с ключами `cache:products:list:{category}:{search}` и `cache:products:detail:{slug}`. `invalidate_catalog` вызывается из seed-скрипта после записи (и позже — из Django-админки этапа 2 это опишет отдельный план).
 
+Две ловушки: (1) `loader` обязан возвращать JSON-сериализуемое (списки dict через `model_dump()`, не Pydantic-объекты); (2) в тесте cache-hit monkeypatch-ить имя в месте использования — `app.api.products.list_products`, а не `app.services.catalog.list_products`.
+
 - [ ] **Step 3: Зелёные тесты** — `uv run pytest -v`
 
 - [ ] **Step 4: Commit** — `git commit -am "feat(backend): redis cache for catalog with TTL"`
@@ -607,4 +611,4 @@ jobs:
 - `docker compose up` поднимает postgres+redis+api, `/health` отвечает, seed наполняет каталог, `/products` отдаёт товары (и кэширует в Redis).
 - `uv run pytest -v` — все зелёные; ruff чистый.
 - Все коммиты на месте.
-- Следующий шаг — план 2: Stripe + Celery + OAuth (пишется после завершения этого).
+- Следующий шаг — план 2: Stripe + Celery + OAuth (пишется после завершения этого). Туда же входит единый формат ошибок API + глобальный exception handler (спека §8) — не потерять.
