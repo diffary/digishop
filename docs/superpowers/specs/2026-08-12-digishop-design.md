@@ -80,6 +80,7 @@ backend/
 ## 5. Auth
 
 - Email+пароль: bcrypt-хэш, JWT (access-токен) в заголовке Authorization.
+- **Куки не используются** (кроме временной state-куки authlib во время OAuth-редиректа): фронт и API на разных доменах (vercel.app / onrender.com), кросс-доменные httpOnly-куки хрупки (SameSite/third-party-блокировки), поэтому токен хранится в localStorage и передаётся заголовком. Трекинговых кук нет → cookie-баннер (GDPR) не нужен.
 - **Google OAuth2** через authlib: редирект-флоу, по callback создаём/находим User по google_id/email. Передача JWT в SPA после кросс-доменного редиректа — через **одноразовый код**: callback кладёт JWT в Redis под коротким кодом (TTL 60 сек) и редиректит на фронт с `?code=...`; SPA обменивает код на JWT запросом `POST /auth/exchange` (код одноразовый — удаляется при обмене). Токен не светится в URL/истории браузера — и это ещё одно применение Redis. Один OAuth-провайдер в MVP — второй ничему новому не учит.
 - Rate limiting на `/auth/login` и `/auth/register` через Redis (защита от перебора).
 
