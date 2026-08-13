@@ -13,6 +13,8 @@ def rate_limit(limit: int = 10, window_sec: int = 60):
     ) -> None:
         client_ip = request.client.host if request.client else "unknown"
         key = f"ratelimit:{request.url.path}:{client_ip}"
+        # INCR-затем-EXPIRE имеет микроокно гонки (упади процесс между ними —
+        # ключ останется без TTL). Для MVP осознанно принято; Lua-скрипт — YAGNI.
         count = await redis.incr(key)
         if count == 1:
             await redis.expire(key, window_sec)
