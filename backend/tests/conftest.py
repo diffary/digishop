@@ -27,9 +27,12 @@ async def engine():
 
 
 @pytest.fixture
-async def client(engine):
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+def session_factory(engine):
+    return async_sessionmaker(engine, expire_on_commit=False)
 
+
+@pytest.fixture
+async def client(session_factory):
     async def _get_session():
         async with session_factory() as session:
             yield session
@@ -38,3 +41,9 @@ async def client(engine):
     app.dependency_overrides[get_session] = _get_session
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
+
+
+@pytest.fixture
+async def db_session(session_factory):
+    async with session_factory() as session:
+        yield session
