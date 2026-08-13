@@ -41,3 +41,18 @@ async def test_me_without_token(client):
 async def test_me_with_garbage_token(client):
     r = await client.get("/auth/me", headers={"Authorization": "Bearer not.a.jwt"})
     assert r.status_code == 401
+
+
+async def test_register_password_over_72_bytes_ascii(client):
+    r = await client.post("/auth/register", json={"email": "a@b.c", "password": "a" * 100})
+    assert r.status_code == 422
+
+
+async def test_register_password_over_72_bytes_multibyte(client):
+    r = await client.post("/auth/register", json={"email": "a@b.c", "password": "ы" * 40})
+    assert r.status_code == 422
+
+
+async def test_login_password_over_72_bytes(client):
+    r = await client.post("/auth/login", json={"email": "a@b.c", "password": "a" * 100})
+    assert r.status_code == 422
