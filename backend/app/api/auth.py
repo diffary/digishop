@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, SessionDep
+from app.core.rate_limit import rate_limit
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models import User
 from app.schemas.auth import LoginIn, RegisterIn, TokenOut, UserOut
@@ -10,7 +11,12 @@ from app.schemas.auth import LoginIn, RegisterIn, TokenOut, UserOut
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=UserOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit())],
+)
 async def register(data: RegisterIn, session: SessionDep) -> User:
     existing = await session.scalar(select(User).where(User.email == data.email))
     if existing is not None:
@@ -27,7 +33,7 @@ async def register(data: RegisterIn, session: SessionDep) -> User:
     return user
 
 
-@router.post("/login", response_model=TokenOut)
+@router.post("/login", response_model=TokenOut, dependencies=[Depends(rate_limit())])
 async def login(data: LoginIn, session: SessionDep) -> TokenOut:
     invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
     user = await session.scalar(select(User).where(User.email == data.email))

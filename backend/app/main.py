@@ -1,10 +1,20 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from app.api import auth, health, products
+from app.core.redis import close_redis_client
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    yield
+    await close_redis_client()
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="DigiShop API")
+    app = FastAPI(title="DigiShop API", lifespan=lifespan)
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(products.router)

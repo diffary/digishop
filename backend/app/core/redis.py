@@ -16,3 +16,10 @@ def get_redis_client() -> aioredis.Redis:
 
 async def get_redis() -> AsyncIterator[aioredis.Redis]:
     yield get_redis_client()
+
+
+async def close_redis_client() -> None:
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
