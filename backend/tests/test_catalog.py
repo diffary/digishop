@@ -1,51 +1,3 @@
-import pytest
-
-from app.models import Category, Product
-
-
-@pytest.fixture
-async def sample_data(db_session):
-    game_assets = Category(name="Игровые ассеты", slug="game-assets")
-    templates = Category(name="Шаблоны", slug="templates")
-    db_session.add_all([game_assets, templates])
-    await db_session.flush()
-
-    products = [
-        Product(
-            category_id=game_assets.id,
-            name="Tank Pack 3D",
-            slug="tank-pack-3d",
-            description="3D tank models",
-            price=1999,
-            image_url=None,
-            file_key="files/tank-pack-3d.zip",
-            is_active=True,
-        ),
-        Product(
-            category_id=game_assets.id,
-            name="Pixel UI Kit",
-            slug="pixel-ui-kit",
-            description="Pixel art UI kit",
-            price=999,
-            image_url=None,
-            file_key="files/pixel-ui-kit.zip",
-            is_active=True,
-        ),
-        Product(
-            category_id=templates.id,
-            name="Old Bundle",
-            slug="old-bundle",
-            description="Deprecated bundle",
-            price=499,
-            image_url=None,
-            file_key="files/old-bundle.zip",
-            is_active=False,
-        ),
-    ]
-    db_session.add_all(products)
-    await db_session.commit()
-
-
 async def test_list_products_excludes_inactive(client, sample_data):
     r = await client.get("/products")
     assert r.status_code == 200
@@ -55,6 +7,7 @@ async def test_list_products_excludes_inactive(client, sample_data):
 
 async def test_filter_by_category(client, sample_data):
     r = await client.get("/products", params={"category": "game-assets"})
+    assert r.status_code == 200
     assert len(r.json()) == 2
     r = await client.get("/products", params={"category": "templates"})
     assert r.json() == []

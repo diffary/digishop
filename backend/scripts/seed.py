@@ -8,7 +8,9 @@ import asyncio
 from sqlalchemy import select
 
 from app.core.db import session_factory
+from app.core.redis import get_redis_client
 from app.models import Category, Product
+from app.services.cache import invalidate_catalog
 
 CATEGORIES = [
     {"name": "Игровые ассеты", "slug": "game-assets"},
@@ -126,6 +128,11 @@ async def main() -> None:
             print(f"product created: {prod['slug']}")
 
         await session.commit()
+
+    redis = get_redis_client()
+    dropped = await invalidate_catalog(redis)
+    print(f"Cache invalidated: {dropped} key(s) dropped.")
+    await redis.aclose()
 
     print("Seed complete.")
 
