@@ -14,6 +14,8 @@ from app.core.db import Base, get_session
 from app.core.redis import get_redis
 from app.main import create_app
 from app.models import Category, Product
+from app.payments.base import CheckoutSession
+from app.payments.stripe_provider import get_payment_provider
 
 
 @pytest.fixture
@@ -110,3 +112,39 @@ async def sample_data(db_session):
     ]
     db_session.add_all(products)
     await db_session.commit()
+
+
+@pytest.fixture
+async def auth_client(app, client):
+    r = await client.post(
+        "/auth/register", json={"email": "buyer@test.dev", "password": "pass12345"}
+    )
+    assert r.status_code == 201
+    r = await client.post("/auth/login", json={"email": "buyer@test.dev", "password": "pass12345"})
+    client.headers["Authorization"] = f"Bearer {r.json()['access_token']}"
+    return client
+
+
+class FakeProvider:
+    name = "fake"
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def create_checkout(
+        self, *, order_id: int, amount_total: int, description: str
+    ) -> CheckoutSession:
+        self.calls.append(
+            {"order_id": order_id, "amount_total": amount_total, "description": description}
+        )
+        return CheckoutSession(session_id="cs_fake_1", url="https://pay.fake/cs_fake_1")
+
+    def verify_webhook(self, payload: bytes, signature: str) -> dict:
+        raise NotImplementedError
+
+
+@pytest.fixture
+def fake_provider(app):
+    provider = FakeProvider()
+    app.dependency_overrides[get_payment_provider] = lambda: provider
+    yield provider

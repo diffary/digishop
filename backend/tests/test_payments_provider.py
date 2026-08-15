@@ -32,6 +32,7 @@ async def test_create_checkout_builds_session(monkeypatch):
     assert line_item["quantity"] == 1
     assert line_item["price_data"]["unit_amount"] == 2998
     assert line_item["price_data"]["currency"] == "usd"
+    assert line_item["price_data"]["product_data"]["name"] == "DigiShop order #7"
     assert recorded["metadata"] == {"order_id": "7"}
 
     settings = get_settings()
@@ -59,6 +60,7 @@ def test_verify_webhook_returns_dict(monkeypatch):
     result = provider.verify_webhook(b"{}", "sig")
 
     assert isinstance(result, dict)
+    assert type(result["data"]["object"]) is dict
     assert result["type"] == "checkout.session.completed"
     assert result["data"]["object"]["id"] == "cs_test_123"
 
