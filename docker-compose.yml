@@ -27,5 +27,25 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_started}
 
+  worker:
+    build: ./backend
+    command: uv run --no-sync celery -A app.tasks.celery_app worker --loglevel=info --without-gossip --without-mingle --without-heartbeat
+    env_file: backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://digishop:digishop@postgres:5432/digishop
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+
+  beat:
+    build: ./backend
+    command: uv run --no-sync celery -A app.tasks.celery_app beat --loglevel=info
+    env_file: backend/.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis: {condition: service_started}
+
 volumes:
   pgdata:
