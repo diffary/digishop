@@ -130,6 +130,8 @@ class FakeProvider:
 
     def __init__(self) -> None:
         self.calls: list[dict] = []
+        self.webhook_event: dict | None = None
+        self.webhook_error: Exception | None = None
 
     async def create_checkout(
         self, *, order_id: int, amount_total: int, description: str
@@ -140,6 +142,10 @@ class FakeProvider:
         return CheckoutSession(session_id="cs_fake_1", url="https://pay.fake/cs_fake_1")
 
     def verify_webhook(self, payload: bytes, signature: str) -> dict:
+        if self.webhook_error is not None:
+            raise self.webhook_error
+        if self.webhook_event is not None:
+            return self.webhook_event
         raise NotImplementedError
 
 

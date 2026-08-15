@@ -54,7 +54,9 @@ async def create_order(
 
 async def list_orders(session: AsyncSession, user_id: int) -> list[tuple[Order, list[OrderItem]]]:
     result = await session.execute(
-        select(Order).where(Order.user_id == user_id).order_by(Order.created_at.desc())
+        select(Order)
+        .where(Order.user_id == user_id)
+        .order_by(Order.created_at.desc(), Order.id.desc())
     )
     orders = result.scalars().all()
     if not orders:
