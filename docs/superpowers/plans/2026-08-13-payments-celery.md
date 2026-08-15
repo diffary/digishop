@@ -24,7 +24,7 @@
 
 **Files:** Create `backend/app/tasks/__init__.py`, `backend/app/tasks/celery_app.py`; Modify `backend/pyproject.toml` (deps: `celery[redis]>=5.4`, `stripe>=10`, `authlib>=1.3`), `docker-compose.yml`, `backend/.env.example`; Test `backend/tests/test_celery_app.py`
 
-- [ ] Красный тест: celery_app импортируется, `celery_app.conf.task_always_eager is False` по умолчанию; `ping` задача (`@shared_task`-стиль не нужен — обычный `@celery_app.task`) в eager-режиме возвращает "pong".
+- [ ] Красный тест: celery_app импортируется; `ping.apply().get() == "pong"` (`apply()` выполняет задачу локально — БЕЗ autouse eager-фикстуры: глобальный eager-режим не нужен нигде в плане, задачи в тестах либо вызываются как обычные функции/через apply(), либо мокается `.delay`).
 - [ ] `celery_app.py`:
 
 ```python
@@ -48,7 +48,11 @@ def ping() -> str:
     return "pong"
 ```
 
-ВНИМАНИЕ: `get_settings()` на уровне модуля — здесь допустимо (воркер и API стартуют с готовым env), но в conftest env уже выставлен до импортов, так что тесты не ломаются. В тестовой фикстуре: `celery_app.conf.task_always_eager = True` (autouse в conftest, с возвратом False в teardown).
+Дополнительно в conf: `broker_transport_options={"health_check_interval": 120}` — вместе с отсутствием result backend и `--without-*` флагами это наша экономия команд Redis под лимиты Upstash (спека §2).
+
+ВНИМАНИЕ: `get_settings()` на уровне модуля — здесь допустимо (воркер и API стартуют с готовым env), а в conftest env выставлен до импортов, так что тесты не ломаются. Autouse eager-фикстуру НЕ добавлять (см. Task 6 — стратегия тестирования задач без eager).
+
+В deps добавить также `itsdangerous>=2.2` — нужен SessionMiddleware в Task 9 (authlib его не тянет, проверено ревью).
 - [ ] compose: сервисы `worker` (`command: uv run --no-sync celery -A app.tasks.celery_app worker --loglevel=info --without-gossip --without-mingle --without-heartbeat`) и `beat` (`command: uv run --no-sync celery -A app.tasks.celery_app beat --loglevel=info`), оба `build: ./backend`, те же env, что api, `depends_on: redis`. Флаги `--without-*` — осознанная экономия команд Redis (Upstash-лимиты, спека §2).
 - [ ] `.env.example` дополнить: `STRIPE_SECRET_KEY=sk_test_...`, `STRIPE_WEBHOOK_SECRET=whsec_...`, `FRONTEND_URL=http://localhost:5173`, `BACKEND_URL=http://localhost:8000`, `GOOGLE_CLIENT_ID=`, `GOOGLE_CLIENT_SECRET=`.
 - [ ] Если докер запущен: `docker compose up -d --build` → 5 контейнеров, в логах worker'а "ready". Иначе SKIPPED.
@@ -80,7 +84,7 @@ class PaymentProvider(Protocol):
     def verify_webhook(self, payload: bytes, signature: str) -> dict: ...
 ```
 
-- [ ] `stripe_provider.py`: класс `StripeProvider` (name="stripe"); `create_checkout` — `stripe.checkout.Session.create` (mode="payment", одна line_item с amount_total в центах и description, `success_url=f"{settings.frontend_url}/order/success?order_id={order_id}"`, `cancel_url=.../order/cancel`, `metadata={"order_id": str(order_id)}`); stripe SDK синхронный — звать через `asyncio.to_thread`. `verify_webhook` — `stripe.Webhook.construct_event(payload, signature, settings.stripe_webhook_secret)`, вернуть event как dict; `stripe.error.SignatureVerificationError` пробрасывать (ловит роут). Модульная функция `get_payment_provider() -> PaymentProvider` (пока всегда StripeProvider) — DI-точка для тестов.
+- [ ] `stripe_provider.py`: класс `StripeProvider` (name="stripe"); `create_checkout` — `stripe.checkout.Session.create` (mode="payment", одна line_item с amount_total в центах и description, `success_url=f"{settings.frontend_url}/order/success?order_id={order_id}"`, `cancel_url=.../order/cancel`, `metadata={"order_id": str(order_id)}`); stripe SDK синхронный — звать через `asyncio.to_thread`. `verify_webhook` — `stripe.Webhook.construct_event(payload, signature, settings.stripe_webhook_secret)`; ВАЖНО (проверено ревью на stripe 15.x): исключение называется `stripe.SignatureVerificationError` (модуля `stripe.error` больше НЕТ — удалён в v8), его пробрасывать (ловит роут); `construct_event` возвращает `stripe.Event` — вернуть `event.to_dict_recursive()`, чтобы прод и моки (обычные dict) вели себя одинаково. Модульная функция `get_payment_provider() -> PaymentProvider` (пока всегда StripeProvider) — DI-точка для тестов.
 - [ ] Тесты: провайдер мокается monkeypatch'ем на уровне stripe SDK (`stripe.checkout.Session.create` → фейковый объект с id/url; `stripe.Webhook.construct_event` → dict или raise) — проверить, что create_checkout передаёт правильные суммы/URL/metadata и что verify_webhook пробрасывает ошибку подписи.
 - [ ] Зелёные, линт. Commit: `feat(backend): payment provider abstraction with stripe implementation`
 
@@ -96,16 +100,17 @@ class PaymentProvider(Protocol):
   - `GET /orders` → список своих заказов (новые сверху) со статусом и items; чужие заказы не видны (создать второго юзера).
   - `GET /orders/{id}` → 200 свой / 404 чужой или несуществующий.
 - [ ] Реализация: `services/orders.py::create_order(session, user, product_ids, provider)` — валидация товаров (активные, существуют), Order+OrderItems, flush → id, `provider.create_checkout(...)`, сохранить `payment_session_id=session_id`, commit, вернуть (order, url). Схемы: `OrderCreateIn(product_ids: list[int] = Field(min_length=1, max_length=50))`, `OrderOut`, `OrderItemOut`. Роутер `/orders` с `CurrentUser`.
+- [ ] Для dependency override `get_payment_provider` нужен доступ к app: вынести в conftest отдельную фикстуру `app` (создание `create_app()` + оба существующих override), а `client` и новый `auth_client` строить поверх неё — НЕ лезть в приватные поля клиента.
 - [ ] Зелёные, линт. Commit: `feat(backend): order creation with checkout and order history`
 
 ### Task 5: Stripe-вебхук (сердце проекта)
 
-**Files:** Create `backend/app/api/webhooks.py`, `backend/app/services/payments_flow.py`; Modify `backend/app/main.py`; Test `backend/tests/test_webhook.py`
+**Files:** Create `backend/app/api/webhooks.py`, `backend/app/services/payments_flow.py`, `backend/app/tasks/delivery.py` (ЗАГЛУШКА: no-op задача `deliver_order(order_id)` с docstring «реализация в Task 6» — нужна, чтобы вебхук мог её импортировать, а тесты — мокать `.delay`); Modify `backend/app/main.py`; Test `backend/tests/test_webhook.py`
 
 **ПРОЦЕССНОЕ:** функция `apply_payment(session, payment_session_id) -> Order | None` в `payments_flow.py` — кандидат на ручное упражнение пользователя (как security.py/cache.py): исполнителю реализовать полностью и работоспособно, контроллер потом обнулит для упражнения.
 
 - [ ] Красные тесты (самые важные тесты проекта):
-  - валидный вебхук `checkout.session.completed` по pending-заказу → 200, заказ стал `paid`, Celery-задача deliver_order поставлена (в eager — выполнена; на этом этапе задача-заглушка из Task 6 ещё не существует — использовать monkeypatch на `deliver_order.delay` и проверять вызов с order.id);
+  - валидный вебхук `checkout.session.completed` по pending-заказу → 200, заказ стал `paid`, и `deliver_order.delay` вызван с order.id (monkeypatch на `.delay` — так тесты вебхука остаются НАВСЕГДА: сквозной «до delivered» проверки через eager НЕ будет, см. Task 6);
   - повторный тот же вебхук → 200, но статус НЕ меняется повторно и задача НЕ ставится второй раз (идемпотентность);
   - неверная подпись (verify_webhook бросает) → 400;
   - вебхук по неизвестному `payment_session_id` → 200 с логом (Stripe нельзя отвечать 4xx на неизвестные события — он будет ретраить вечно);
@@ -118,7 +123,9 @@ class PaymentProvider(Protocol):
 
 **Files:** Create `backend/app/tasks/delivery.py`, `backend/app/services/delivery.py`; Test `backend/tests/test_delivery.py`
 
-- [ ] Красные тесты (eager): по paid-заказу `deliver_order(order.id)` создаёт DownloadLink на каждый OrderItem (expires_at = +7 дней), Notification(type="order_delivered", payload с токенами), статус → `delivered`; повторный вызов по delivered-заказу — no-op (идемпотентность); по pending-заказу — no-op с warning-логом.
+- [ ] Красные тесты — стратегия БЕЗ eager (важно, ловушка найдена ревью: eager выполняет задачу в потоке вызывающего, а внутри задачи `asyncio.run()` — из async-теста с уже работающим event loop это RuntimeError, к тому же тестовый aiosqlite-движок привязан к лупу теста):
+  1. **Бизнес-логика — напрямую через async-сервис** `deliver(session, order_id)` в обычных async-тестах: по paid-заказу создаёт DownloadLink на каждый OrderItem (expires_at = +7 дней) и Notification(type="order_delivered", payload с токенами), статус → `delivered`; повторный вызов по delivered — no-op (идемпотентность); по pending — no-op с warning-логом.
+  2. **Celery-обёртка — одним СИНХРОННЫМ тестом** (def, не async): monkeypatch `app.services.delivery.deliver` на записывающий async-стаб → вызвать `deliver_order.run(42)` (или `.apply(args=[42])`) → стаб получил order_id=42. Здесь `asyncio.run` легален — снаружи нет запущенного лупа. БД не участвует.
 - [ ] Реализация: `services/delivery.py::deliver(session, order_id)` — async-логика; `tasks/delivery.py`:
 
 ```python
@@ -142,8 +149,8 @@ def deliver_order(self, order_id: int) -> None:
         raise self.retry(exc=exc)
 ```
 
-В тестах session_factory подменяется на тестовую (monkeypatch `app.core.db._session_factory` или передача фабрики — исполнителю: САМЫЙ ПРОСТОЙ рабочий способ — в тесте monkeypatch'ить `app.tasks.delivery.session_factory`-импорт нельзя (импорт внутри функции — это специально, чтобы monkeypatch `app.core.db._session_factory` сработал); проверить пустым прогоном что подход работает, если нет — спросить контроллера).
-- [ ] Вебхук из Task 5: заменить monkeypatch-заглушку на реальную задачу, обновить тесты (eager-режим выполняет доставку синхронно — тест вебхука теперь проверяет и итоговый `delivered`).
+Импорты session_factory/deliver — внутри функции задачи (как в сниппете): это осознанно, чтобы monkeypatch в синхронном тесте обёртки работал через `app.services.delivery.deliver`.
+- [ ] Заглушку `deliver_order` из Task 5 заменить реальной реализацией. Тесты вебхука НЕ трогать — они мокают `.delay` и остаются как есть.
 - [ ] Зелёные, линт. Commit: `feat(backend): celery order delivery with download links and notifications`
 
 ### Task 7: Периодика — beat-задачи
@@ -159,7 +166,7 @@ def deliver_order(self, order_id: int) -> None:
 **Files:** Create `backend/app/storage/__init__.py`, `backend/app/storage/base.py`, `backend/app/storage/local.py`, `backend/app/api/downloads.py`, `backend/files/.gitkeep` + 1 демо-zip; Modify `backend/app/main.py`, `backend/scripts/seed.py` (file_key существующего демо-файла); Test `backend/tests/test_downloads.py`
 
 - [ ] Красные тесты: валидный токен → 200 с файлом (FileResponse), download_count +1; истёкший → 410; несуществующий → 404; повторное скачивание валидным токеном работает (лимита нет — спека §3).
-- [ ] Реализация: `Storage` Protocol (`exists(key) -> bool`, `path(key) -> Path`); `LocalStorage(root=Path(__file__)... backend/files)`; эндпоинт публичный (токен и есть секрет), безопасность: key приходит ТОЛЬКО из БД (file_key), не из URL — path traversal невозможен по построению, но в LocalStorage всё равно проверить `resolve().is_relative_to(root)`.
+- [ ] Реализация: `Storage` Protocol (`exists(key) -> bool`, `path(key) -> Path`); `LocalStorage(root=<каталог backend/>)` — ВАЖНО: существующие file_key уже содержат префикс `files/` (seed и conftest sample_data), поэтому root — это `backend/`, а не `backend/files/`, иначе получится `files/files/...`; эндпоинт публичный (токен и есть секрет), безопасность: key приходит ТОЛЬКО из БД (file_key), не из URL — path traversal невозможен по построению, но в LocalStorage всё равно проверить `resolve().is_relative_to(root)`.
 - [ ] Зелёные, линт. Commit: `feat(backend): token-based downloads with storage abstraction`
 
 ### Task 9: Google OAuth2
