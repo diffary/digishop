@@ -12,7 +12,8 @@ celery_app.conf.update(
     broker_transport_options={"health_check_interval": 120},
     broker_connection_retry_on_startup=True,
 )
-celery_app.autodiscover_tasks(["app.tasks"])
+# задачи регистрируются явными импортами в app/tasks/__init__.py
+# (autodiscover ищет только tasks.py — тихо пропустил бы наши модули)
 
 
 @celery_app.task
