@@ -11,19 +11,28 @@ logger = logging.getLogger(__name__)
 async def apply_payment(session: AsyncSession, payment_session_id: str) -> Order | None:
     """Идемпотентный переход заказа pending→paid по платёжной сессии.
 
-    Возвращает Order, если переход произошёл, иначе None (заказ не найден
-    или уже обработан — повторный вебхук).
+    Контракт (его же проверяют тесты tests/test_webhook.py):
+    1. Найти Order по payment_session_id. Не нашёл — warning в лог, вернуть None.
+    2. Статус НЕ pending — info в лог (повторный вебхук), вернуть None. Это идемпотентность.
+    3. Иначе: перевести в paid, закоммитить, вернуть Order.
+
+    Подсказки: select(Order).where(...), у результата есть .scalar_one_or_none();
+    статусы сравнивать с OrderStatus.pending / присваивать OrderStatus.paid;
+    logger.warning / logger.info уже импортированы.
     """
     result = await session.execute(
         select(Order).where(Order.payment_session_id == payment_session_id)
     )
     order = result.scalar_one_or_none()
+
     if order is None:
-        logger.warning("webhook: unknown payment_session_id %s", payment_session_id)
+        logger.warning("Order with payment_session_id %s not found", payment_session_id)
         return None
+
     if order.status != OrderStatus.pending:
-        logger.info("webhook replay for order %s (status=%s) — no-op", order.id, order.status)
+        logger.info("Order %s is not pending (current status: %s).", order.id, order.status)
         return None
+
     order.status = OrderStatus.paid
     await session.commit()
     return order
