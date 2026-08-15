@@ -56,3 +56,27 @@ async def test_register_password_over_72_bytes_multibyte(client):
 async def test_login_password_over_72_bytes(client):
     r = await client.post("/auth/login", json={"email": "a@b.c", "password": "a" * 100})
     assert r.status_code == 422
+
+
+async def test_register_normalizes_email_case(client):
+    r = await client.post(
+        "/auth/register", json={"email": "Alice@Example.COM", "password": "pass1234"}
+    )
+    assert r.status_code == 201
+    assert r.json()["email"] == "alice@example.com"
+
+
+async def test_login_case_insensitive_email(client):
+    await client.post("/auth/register", json={"email": "Alice@Example.COM", "password": "pass1234"})
+    r = await client.post(
+        "/auth/login", json={"email": "ALICE@example.com", "password": "pass1234"}
+    )
+    assert r.status_code == 200
+
+
+async def test_register_duplicate_email_case_insensitive(client):
+    await client.post("/auth/register", json={"email": "Alice@Example.COM", "password": "pass1234"})
+    r = await client.post(
+        "/auth/register", json={"email": "alice@example.com", "password": "other123"}
+    )
+    assert r.status_code == 409

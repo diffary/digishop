@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import CurrentUser, SessionDep
 from app.core.rate_limit import rate_limit
@@ -18,11 +19,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     dependencies=[Depends(rate_limit())],
 )
 async def register(data: RegisterIn, session: SessionDep) -> User:
-    existing = await session.scalar(select(User).where(User.email == data.email))
+    email = data.email.lower()
+    existing = await session.scalar(select(User).where(User.email == email))
     if existing is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
 
-    user = User(email=data.email, password_hash=hash_password(data.password))
+    # bcrypt нарочно медленный — в thread pool, чтобы не морозить event loop.
+    password_hash = await run_in_threadpool(hash_password, data.password)
+    user = User(email=email, password_hash=password_hash)
     session.add(user)
     try:
         await session.commit()
@@ -36,12 +40,12 @@ async def register(data: RegisterIn, session: SessionDep) -> User:
 @router.post("/login", response_model=TokenOut, dependencies=[Depends(rate_limit())])
 async def login(data: LoginIn, session: SessionDep) -> TokenOut:
     invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
-    user = await session.scalar(select(User).where(User.email == data.email))
-    if (
-        user is None
-        or user.password_hash is None
-        or not verify_password(data.password, user.password_hash)
-    ):
+    email = data.email.lower()
+    user = await session.scalar(select(User).where(User.email == email))
+    if user is None or user.password_hash is None:
+        raise invalid
+    # bcrypt нарочно медленный — в thread pool, чтобы не морозить event loop.
+    if not await run_in_threadpool(verify_password, data.password, user.password_hash):
         raise invalid
     return TokenOut(access_token=create_access_token(user.id))
 

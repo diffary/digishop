@@ -43,16 +43,21 @@ async def fake_redis():
 
 
 @pytest.fixture
-async def client(session_factory, fake_redis):
+def app(session_factory):
     async def _get_session():
         async with session_factory() as session:
             yield session
 
+    application = create_app()
+    application.dependency_overrides[get_session] = _get_session
+    return application
+
+
+@pytest.fixture
+async def client(app, fake_redis):
     async def _get_redis():
         yield fake_redis
 
-    app = create_app()
-    app.dependency_overrides[get_session] = _get_session
     app.dependency_overrides[get_redis] = _get_redis
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c

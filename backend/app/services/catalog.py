@@ -31,7 +31,10 @@ async def list_products(
     if category_slug is not None:
         stmt = stmt.where(Category.slug == category_slug)
     if search is not None:
-        stmt = stmt.where(Product.name.ilike(f"%{search}%"))
+        # Экранируем спецсимволы LIKE/ILIKE, чтобы пользовательский ввод не
+        # интерпретировался как wildcard-паттерн.
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        stmt = stmt.where(Product.name.ilike(f"%{escaped}%", escape="\\"))
 
     rows = await session.execute(stmt)
     return [_product_out(product, slug) for product, slug in rows.all()]

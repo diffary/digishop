@@ -18,6 +18,16 @@ async def test_search_by_name(client, sample_data):
     assert [p["slug"] for p in r.json()] == ["tank-pack-3d"]
 
 
+async def test_search_percent_wildcard_is_literal(client, sample_data):
+    r = await client.get("/products", params={"search": "%"})
+    assert r.json() == []
+
+
+async def test_search_underscore_wildcard_is_literal(client, sample_data):
+    r = await client.get("/products", params={"search": "_ank"})
+    assert r.json() == []
+
+
 async def test_product_detail_by_slug(client, sample_data):
     r = await client.get("/products/tank-pack-3d")
     assert r.status_code == 200
