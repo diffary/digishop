@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api import auth, health, products
+from app.core.errors import register_error_handlers
 from app.core.redis import close_redis_client
 
 
@@ -18,6 +19,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(products.router)
+    register_error_handlers(app)
     return app
 
 
