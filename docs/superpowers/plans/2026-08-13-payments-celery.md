@@ -4,7 +4,7 @@
 
 **Goal:** Полный платёжный флоу: заказ → Stripe Checkout (test mode) → вебхук → Celery-доставка (ссылки на скачивание + Notification) → скачивание по токену; плюс Google OAuth и единый формат ошибок. docker-compose дорастает до 5 сервисов.
 
-**Architecture:** По спеке §2, §4–§6. Платежи за абстракцией `PaymentProvider` (Stripe сегодня, LiqPay потом). Вебхук: подпись → идемпотентный переход `pending→paid` → постановка Celery-задачи → быстрый 200. Celery-задачи синхронные, внутри — `asyncio.run()` вокруг async-логики (переиспользуем существующие async-сервисы). Тесты: Stripe и Google мокаются, Celery в eager-режиме, Redis — fakeredis; сеть не нужна.
+**Architecture:** По спеке §2, §4–§6. Платежи за абстракцией `PaymentProvider` (Stripe сегодня, LiqPay потом). Вебхук: подпись → идемпотентный переход `pending→paid` → постановка Celery-задачи → быстрый 200. Celery-задачи синхронные, внутри — `asyncio.run()` вокруг async-логики (переиспользуем существующие async-сервисы). Тесты: Stripe и Google мокаются, Celery-задачи в тестах вызываются напрямую/через `apply()`, а `.delay` мокается (глобального eager-режима НЕТ), Redis — fakeredis; сеть не нужна.
 
 **Tech Stack:** stripe (SDK), celery[redis], authlib, httpx; остальное уже в проекте.
 
@@ -85,7 +85,7 @@ class PaymentProvider(Protocol):
 ```
 
 - [ ] `stripe_provider.py`: класс `StripeProvider` (name="stripe"); `create_checkout` — `stripe.checkout.Session.create` (mode="payment", одна line_item с amount_total в центах и description, `success_url=f"{settings.frontend_url}/order/success?order_id={order_id}"`, `cancel_url=.../order/cancel`, `metadata={"order_id": str(order_id)}`); stripe SDK синхронный — звать через `asyncio.to_thread`. `verify_webhook` — `stripe.Webhook.construct_event(payload, signature, settings.stripe_webhook_secret)`; ВАЖНО (проверено ревью на stripe 15.x): исключение называется `stripe.SignatureVerificationError` (модуля `stripe.error` больше НЕТ — удалён в v8), его пробрасывать (ловит роут); `construct_event` возвращает `stripe.Event` — вернуть `event.to_dict_recursive()`, чтобы прод и моки (обычные dict) вели себя одинаково. Модульная функция `get_payment_provider() -> PaymentProvider` (пока всегда StripeProvider) — DI-точка для тестов.
-- [ ] Тесты: провайдер мокается monkeypatch'ем на уровне stripe SDK (`stripe.checkout.Session.create` → фейковый объект с id/url; `stripe.Webhook.construct_event` → dict или raise) — проверить, что create_checkout передаёт правильные суммы/URL/metadata и что verify_webhook пробрасывает ошибку подписи.
+- [ ] Тесты: провайдер мокается monkeypatch'ем на уровне stripe SDK (`stripe.checkout.Session.create` → фейковый объект с id/url; `stripe.Webhook.construct_event` → `stripe.Event.construct_from({...}, "sk_test")`, НЕ голый dict — у dict нет `to_dict_recursive()`; либо raise) — проверить, что create_checkout передаёт правильные суммы/URL/metadata и что verify_webhook пробрасывает ошибку подписи.
 - [ ] Зелёные, линт. Commit: `feat(backend): payment provider abstraction with stripe implementation`
 
 ### Task 4: Заказы — POST /orders + история
