@@ -10,8 +10,13 @@ async def test_all_tables_create():
         await conn.run_sync(Base.metadata.create_all)
     names = set(Base.metadata.tables)
     assert names == {
-        "users", "categories", "products",
-        "orders", "order_items", "download_links", "notifications",
+        "users",
+        "categories",
+        "products",
+        "orders",
+        "order_items",
+        "download_links",
+        "notifications",
     }
     await engine.dispose()
     assert User.__tablename__ == "users"

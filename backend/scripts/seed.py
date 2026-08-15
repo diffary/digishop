@@ -94,9 +94,7 @@ async def main() -> None:
         slug_to_id: dict[str, int] = {}
 
         for cat in CATEGORIES:
-            existing = await session.scalar(
-                select(Category).where(Category.slug == cat["slug"])
-            )
+            existing = await session.scalar(select(Category).where(Category.slug == cat["slug"]))
             if existing is not None:
                 print(f"category skipped (exists): {cat['slug']}")
                 slug_to_id[cat["slug"]] = existing.id
@@ -108,9 +106,7 @@ async def main() -> None:
             print(f"category created: {cat['slug']}")
 
         for prod in PRODUCTS:
-            existing = await session.scalar(
-                select(Product).where(Product.slug == prod["slug"])
-            )
+            existing = await session.scalar(select(Product).where(Product.slug == prod["slug"]))
             if existing is not None:
                 print(f"product skipped (exists): {prod['slug']}")
                 continue

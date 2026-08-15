@@ -37,8 +37,10 @@ async def register(data: RegisterIn, session: SessionDep) -> User:
 async def login(data: LoginIn, session: SessionDep) -> TokenOut:
     invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
     user = await session.scalar(select(User).where(User.email == data.email))
-    if user is None or user.password_hash is None or not verify_password(
-        data.password, user.password_hash
+    if (
+        user is None
+        or user.password_hash is None
+        or not verify_password(data.password, user.password_hash)
     ):
         raise invalid
     return TokenOut(access_token=create_access_token(user.id))

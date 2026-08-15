@@ -12,11 +12,11 @@ async def get_or_set(redis, key: str, ttl: int, loader):
     """
     value = await redis.get(key)
     if value is not None:
-        return json.loads(value)  # ТВОЁ УПРАЖНЕНИЕ №1
+        return json.loads(value)
     else:
         value = await loader()
         await redis.set(key, json.dumps(value), ex=ttl)
-        return value  # ТВОЁ УПРАЖНЕНИЕ №2
+        return value
 
 
 async def invalidate_catalog(redis) -> int:
@@ -30,5 +30,4 @@ async def invalidate_catalog(redis) -> int:
 
     if keys_to_delete:
         await redis.delete(*keys_to_delete)
-    return len(keys_to_delete)  # ТВОЁ УПРАЖНЕНИЕ №2
-
+    return len(keys_to_delete)
