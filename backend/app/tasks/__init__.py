@@ -9,4 +9,7 @@ autodiscover (autodiscover_tasks ищет только tasks.py и тихо пр
     from app.tasks import maintenance  # noqa
 """
 
-from app.tasks import delivery  # noqa: F401
+from app.tasks import (
+    delivery,  # noqa: F401
+    maintenance,  # noqa: F401
+)

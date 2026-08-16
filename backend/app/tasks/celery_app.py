@@ -16,6 +16,22 @@ celery_app.conf.update(
 # (autodiscover ищет только tasks.py — тихо пропустил бы наши модули)
 
 
+celery_app.conf.beat_schedule = {
+    "expire-pending-orders": {
+        "task": "app.tasks.maintenance.expire_pending_orders",
+        "schedule": 15 * 60,
+    },
+    "cleanup-expired-links": {
+        "task": "app.tasks.maintenance.cleanup_expired_links_task",
+        "schedule": 24 * 60 * 60,
+    },
+    "check-undelivered-paid": {
+        "task": "app.tasks.maintenance.check_undelivered_paid",
+        "schedule": 10 * 60,
+    },
+}
+
+
 @celery_app.task
 def ping() -> str:
     return "pong"
