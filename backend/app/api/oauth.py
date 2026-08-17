@@ -3,7 +3,7 @@ import secrets
 from typing import Annotated
 
 import redis.asyncio as aioredis
-from authlib.integrations.starlette_client import OAuth
+from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
@@ -44,8 +44,18 @@ async def google_login(request: Request):
 
 @router.get("/google/callback")
 async def google_callback(request: Request, session: SessionDep, redis: RedisDep):
-    token = await oauth.google.authorize_access_token(request)
+    try:
+        token = await oauth.google.authorize_access_token(request)
+    except OAuthError as exc:
+        # отказ на экране Google / битый state — действие пользователя, не наша авария
+        logger.info("Google OAuth aborted: %s", exc.error)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "OAuth flow was not completed") from None
+
     info = token["userinfo"]
+    # доверяем email только если Google его верифицировал — иначе привязка
+    # по email была бы вектором захвата чужого аккаунта
+    if not info.get("email_verified", False):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Google account email is not verified")
     email = info["email"].lower()
     google_id = info["sub"]
 

@@ -20,9 +20,28 @@ class FakeGoogleOAuth:
 
 @pytest.fixture
 def fake_google(monkeypatch):
-    fake = FakeGoogleOAuth({"email": "GUser@Example.com", "sub": "google-sub-123"})
+    fake = FakeGoogleOAuth(
+        {"email": "GUser@Example.com", "sub": "google-sub-123", "email_verified": True}
+    )
     monkeypatch.setattr("app.api.oauth.oauth.google", fake)
     return fake
+
+
+async def test_callback_rejects_unverified_email(client, fake_google):
+    fake_google.userinfo["email_verified"] = False
+    r = await client.get("/auth/google/callback", follow_redirects=False)
+    assert r.status_code == 400
+
+
+async def test_callback_denied_consent_returns_400(client, fake_google, monkeypatch):
+    from authlib.integrations.starlette_client import OAuthError
+
+    async def denied(request):
+        raise OAuthError(error="access_denied")
+
+    monkeypatch.setattr(fake_google, "authorize_access_token", denied)
+    r = await client.get("/auth/google/callback", follow_redirects=False)
+    assert r.status_code == 400
 
 
 async def test_google_login_redirects(client, fake_google):
