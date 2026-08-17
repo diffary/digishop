@@ -110,6 +110,9 @@ async def main() -> None:
             if existing is not None:
                 print(f"product skipped (exists): {prod['slug']}")
                 continue
+            file_key = (
+                "files/demo.zip" if prod["slug"] == "tank-pack-3d" else f"files/{prod['slug']}.zip"
+            )
             product = Product(
                 category_id=slug_to_id[prod["category_slug"]],
                 name=prod["name"],
@@ -117,7 +120,7 @@ async def main() -> None:
                 description=prod["description"],
                 price=prod["price"],
                 image_url=None,
-                file_key=f"files/{prod['slug']}.zip",
+                file_key=file_key,
                 is_active=True,
             )
             session.add(product)
