@@ -14,7 +14,9 @@ class LocalStorage:
 
     def _resolve(self, key: str) -> Path:
         resolved = (self.root / key).resolve()
-        if not resolved.is_relative_to(self.root):
+        # ключ обязан оставаться внутри root/files/ — иначе file_key вида
+        # "files/../.env" мог бы отдать секреты бэкенда (находка ревью Task 8)
+        if not resolved.is_relative_to(self.root / "files"):
             raise ValueError(f"path traversal detected for key: {key!r}")
         return resolved
 

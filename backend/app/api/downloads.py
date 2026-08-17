@@ -35,8 +35,14 @@ async def download(token: str, session: SessionDep, storage: StorageDep) -> File
     item = await session.get(OrderItem, link.order_item_id)
     product = await session.get(Product, item.product_id)
 
-    if not storage.exists(product.file_key):
-        logger.warning("download: file missing for key %s (token %s)", product.file_key, token)
+    try:
+        file_exists = storage.exists(product.file_key)
+    except ValueError:
+        # traversal-образный ключ в БД — не 500, а 404 с логом (без токена: он ещё живой)
+        logger.warning("download: rejected file_key %r (link_id=%s)", product.file_key, link.id)
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found") from None
+    if not file_exists:
+        logger.warning("download: file missing for key %s (link_id=%s)", product.file_key, link.id)
         raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found")
 
     link.download_count += 1
