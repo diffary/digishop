@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,5 +35,6 @@ async def apply_payment(session: AsyncSession, payment_session_id: str) -> Order
         return None
 
     order.status = OrderStatus.paid
+    order.paid_at = datetime.now(UTC)
     await session.commit()
     return order

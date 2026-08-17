@@ -1,3 +1,5 @@
+import time
+
 import stripe
 
 from app.core.config import get_settings
@@ -39,6 +41,10 @@ async def test_create_checkout_builds_session(monkeypatch):
     assert recorded["success_url"].startswith(settings.frontend_url)
     assert "/order/success?order_id=7" in recorded["success_url"]
     assert "/order/cancel" in recorded["cancel_url"]
+
+    now = int(time.time())
+    assert "expires_at" in recorded
+    assert now + 3500 <= recorded["expires_at"] <= now + 3700
 
 
 def test_verify_webhook_returns_dict(monkeypatch):

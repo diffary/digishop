@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 import stripe
 
@@ -31,6 +32,9 @@ class StripeProvider:
             metadata={"order_id": str(order_id)},
             success_url=f"{settings.frontend_url}/order/success?order_id={order_id}",
             cancel_url=f"{settings.frontend_url}/order/cancel",
+            # сессия Stripe живёт ровно столько же, сколько наш pending-заказ —
+            # иначе можно оплатить уже проваленный заказ
+            expires_at=int(time.time()) + 3600,
         )
         return CheckoutSession(session_id=session.id, url=session.url)
 

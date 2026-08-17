@@ -197,3 +197,11 @@ def deliver_order(self, order_id: int) -> None:
 4. Живой smoke-тест (Task 10) пройден.
 5. Ручное упражнение пользователя: `apply_payment` в payments_flow.py.
 6. Obsidian-заметки: Celery, Stripe-вебхуки, OAuth2 — написаны контроллером по ходу.
+
+### Fix после ревью Task 7
+
+Баг: наш beat-таск заваливал pending-заказы через 1ч, но дефолтная Stripe Checkout Session живёт 24ч — покупатель мог оплатить уже проваленный заказ (деньги списаны, доставки нет, мониторинг это не видел).
+
+- Время жизни Stripe-сессии (`expires_at` в `stripe_provider.create_checkout`) выровнено с нашим TTL: 1ч; `expire_stale_pending` заваливает pending только через 75 мин (1ч + 15 мин запаса на задержку вебхука) — по построению оплатить уже failed-заказ теперь невозможно.
+- Заказу добавлено поле `paid_at` (миграция `ce202e1763ab_add_paid_at_to_orders`), проставляется в `payments_flow.apply_payment` в момент перехода в `paid`.
+- `find_undelivered_paid` сравнивает `coalesce(paid_at, created_at)` с cutoff вместо `created_at` — устранён ложный алерт для заказов, созданных давно, но оплаченных недавно.

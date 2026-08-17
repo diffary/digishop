@@ -22,11 +22,12 @@ async def _make_user(db_session) -> int:
     return user.id
 
 
-async def _make_order(db_session, user_id, status, created_at) -> Order:
+async def _make_order(db_session, user_id, status, created_at, paid_at=None) -> Order:
     order = Order(user_id=user_id, status=status, total=1999, provider="stripe")
     db_session.add(order)
     await db_session.flush()
     order.created_at = created_at
+    order.paid_at = paid_at
     return order
 
 
@@ -53,6 +54,22 @@ async def test_expire_pending_orders(db_session, sample_data):
     assert old_pending.status == OrderStatus.failed
     assert fresh_pending.status == OrderStatus.pending
     assert old_paid.status == OrderStatus.paid
+
+
+async def test_expire_pending_orders_inside_grace_not_failed(db_session, sample_data):
+    user_id = await _make_user(db_session)
+    now = datetime.now(UTC)
+
+    within_grace = await _make_order(
+        db_session, user_id, OrderStatus.pending, now - timedelta(minutes=65)
+    )
+    await db_session.commit()
+
+    count = await expire_stale_pending(db_session)
+    assert count == 0
+
+    await db_session.refresh(within_grace)
+    assert within_grace.status == OrderStatus.pending
 
 
 async def test_expire_pending_orders_none_stale(db_session, sample_data):
@@ -96,11 +113,19 @@ async def test_find_undelivered_paid(db_session, sample_data):
     now = datetime.now(UTC)
 
     undelivered = await _make_order(
-        db_session, user_id, OrderStatus.paid, now - timedelta(minutes=30)
+        db_session,
+        user_id,
+        OrderStatus.paid,
+        now - timedelta(minutes=30),
+        paid_at=now - timedelta(minutes=30),
     )
 
     delivered = await _make_order(
-        db_session, user_id, OrderStatus.delivered, now - timedelta(minutes=30)
+        db_session,
+        user_id,
+        OrderStatus.delivered,
+        now - timedelta(minutes=30),
+        paid_at=now - timedelta(minutes=30),
     )
     delivered_item = OrderItem(order_id=delivered.id, product_id=1, price_at_purchase=1999)
     db_session.add(delivered_item)
@@ -110,7 +135,11 @@ async def test_find_undelivered_paid(db_session, sample_data):
     )
 
     fresh_paid = await _make_order(
-        db_session, user_id, OrderStatus.paid, now - timedelta(minutes=5)
+        db_session,
+        user_id,
+        OrderStatus.paid,
+        now - timedelta(minutes=5),
+        paid_at=now - timedelta(minutes=5),
     )
     await db_session.commit()
 
@@ -119,6 +148,41 @@ async def test_find_undelivered_paid(db_session, sample_data):
     assert undelivered.id in ids
     assert delivered.id not in ids
     assert fresh_paid.id not in ids
+
+
+async def test_find_undelivered_paid_no_false_positive_from_created_at(db_session, sample_data):
+    """created_at=12:00, paid_at=12:50, checked=12:55 (older_than=15 -> cutoff 12:40):
+    заказ оплачен недавно (5 минут назад), несмотря на то, что создан был >15 минут назад —
+    не должен попадать в мониторинг."""
+    user_id = await _make_user(db_session)
+    checked_at = datetime(2026, 1, 1, 12, 55, tzinfo=UTC)
+    created_at = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+    paid_at = datetime(2026, 1, 1, 12, 50, tzinfo=UTC)
+
+    order = await _make_order(db_session, user_id, OrderStatus.paid, created_at, paid_at=paid_at)
+    await db_session.commit()
+
+    ids = await find_undelivered_paid(db_session, older_than_minutes=15, now=checked_at)
+
+    assert order.id not in ids
+
+
+async def test_find_undelivered_paid_legacy_row_without_paid_at_uses_created_at(
+    db_session, sample_data
+):
+    """У старых заказов (до миграции) paid_at может быть NULL — тогда используем
+    created_at как фолбэк, чтобы не потерять мониторинг."""
+    user_id = await _make_user(db_session)
+    now = datetime.now(UTC)
+
+    legacy_undelivered = await _make_order(
+        db_session, user_id, OrderStatus.paid, now - timedelta(minutes=30), paid_at=None
+    )
+    await db_session.commit()
+
+    ids = await find_undelivered_paid(db_session, older_than_minutes=15)
+
+    assert legacy_undelivered.id in ids
 
 
 def test_expire_pending_orders_task_runs_service(monkeypatch):
