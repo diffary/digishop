@@ -3,8 +3,10 @@ import asyncio
 from app.tasks.celery_app import celery_app
 
 
-@celery_app.task(bind=True, max_retries=5, retry_backoff=True)
-def deliver_order(self, order_id: int) -> None:
+# retry_backoff работает ТОЛЬКО в паре с autoretry_for — при ручном self.retry()
+# Celery молча использует фиксированный default_retry_delay (находка финального ревью)
+@celery_app.task(autoretry_for=(Exception,), max_retries=5, retry_backoff=True)
+def deliver_order(order_id: int) -> None:
     # импорты внутри — чтобы monkeypatch app.services.delivery.deliver работал в тестах
     from app.core.db import fresh_session
     from app.services.delivery import deliver
@@ -13,7 +15,4 @@ def deliver_order(self, order_id: int) -> None:
         async with fresh_session() as session:
             await deliver(session, order_id)
 
-    try:
-        asyncio.run(_run())
-    except Exception as exc:
-        raise self.retry(exc=exc) from exc
+    asyncio.run(_run())
