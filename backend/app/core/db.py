@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -32,3 +33,21 @@ def session_factory() -> async_sessionmaker[AsyncSession]:
 async def get_session() -> AsyncIterator[AsyncSession]:
     async with session_factory()() as session:
         yield session
+
+
+@asynccontextmanager
+async def fresh_session() -> AsyncIterator[AsyncSession]:
+    """Сессия на СВЕЖЕМ движке — для Celery-задач.
+
+    Каждый asyncio.run() в задаче создаёт новый event loop, а глобальный
+    движок привязывается к лупу первой задачи процесса — вторая задача
+    падает с «Future attached to a different loop» (поймано смоук-тестом).
+    Здесь движок создаётся и гасится внутри текущего лупа.
+    """
+    engine = create_async_engine(get_settings().database_url)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with factory() as session:
+            yield session
+    finally:
+        await engine.dispose()
