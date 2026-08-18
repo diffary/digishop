@@ -1,6 +1,7 @@
+import { renderHook } from "@testing-library/react";
 import { beforeEach, expect, test } from "vitest";
 
-import { useCartStore } from "../stores/cart";
+import { useCartCount, useCartStore, useCartTotal } from "../stores/cart";
 
 beforeEach(() => {
   useCartStore.setState({ items: [] });
@@ -50,13 +51,18 @@ test("clear очищает корзину", () => {
   expect(useCartStore.getState().items).toEqual([]);
 });
 
-test("total суммирует центы, count считает позиции", () => {
+test("useCartTotal суммирует центы, useCartCount считает позиции", () => {
   useCartStore.getState().add(item1);
   useCartStore.getState().add(item2);
 
-  const { items } = useCartStore.getState();
-  expect(items.length).toBe(2);
-  expect(items.reduce((sum, i) => sum + i.price, 0)).toBe(2998);
+  // проверяем именно СЕЛЕКТОРЫ, а не собственную арифметику теста
+  expect(renderHook(() => useCartTotal()).result.current).toBe(2998);
+  expect(renderHook(() => useCartCount()).result.current).toBe(2);
+});
+
+test("useCartTotal на пустой корзине равен 0", () => {
+  expect(renderHook(() => useCartTotal()).result.current).toBe(0);
+  expect(renderHook(() => useCartCount()).result.current).toBe(0);
 });
 
 test("персист: после add localStorage содержит товар", () => {
