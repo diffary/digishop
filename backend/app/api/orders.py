@@ -6,7 +6,13 @@ from app.api.deps import CurrentUser, SessionDep
 from app.payments.base import PaymentProvider
 from app.payments.stripe_provider import get_payment_provider
 from app.schemas.orders import OrderCreateIn, OrderCreateOut, OrderItemOut, OrderOut
-from app.services.orders import InvalidProductsError, create_order, get_order, list_orders
+from app.services.orders import (
+    InvalidProductsError,
+    build_item_views,
+    create_order,
+    get_order,
+    list_orders,
+)
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -33,19 +39,27 @@ async def create_order_endpoint(
 @router.get("", response_model=list[OrderOut])
 async def list_orders_endpoint(user: CurrentUser, session: SessionDep) -> list[OrderOut]:
     orders = await list_orders(session, user.id)
-    return [
-        OrderOut(
-            id=order.id,
-            status=order.status,
-            total=order.total,
-            created_at=order.created_at,
-            items=[
-                OrderItemOut(product_id=i.product_id, price_at_purchase=i.price_at_purchase)
-                for i in items
-            ],
+    result = []
+    for order, items in orders:
+        views = await build_item_views(session, items)
+        result.append(
+            OrderOut(
+                id=order.id,
+                status=order.status,
+                total=order.total,
+                created_at=order.created_at,
+                items=[
+                    OrderItemOut(
+                        product_id=v.product_id,
+                        price_at_purchase=v.price_at_purchase,
+                        product_name=v.product_name,
+                        download_token=v.download_token,
+                    )
+                    for v in views
+                ],
+            )
         )
-        for order, items in orders
-    ]
+    return result
 
 
 @router.get("/{order_id}", response_model=OrderOut)
@@ -54,13 +68,19 @@ async def get_order_endpoint(order_id: int, user: CurrentUser, session: SessionD
     if result is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Order not found")
     order, items = result
+    views = await build_item_views(session, items)
     return OrderOut(
         id=order.id,
         status=order.status,
         total=order.total,
         created_at=order.created_at,
         items=[
-            OrderItemOut(product_id=i.product_id, price_at_purchase=i.price_at_purchase)
-            for i in items
+            OrderItemOut(
+                product_id=v.product_id,
+                price_at_purchase=v.price_at_purchase,
+                product_name=v.product_name,
+                download_token=v.download_token,
+            )
+            for v in views
         ],
     )

@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.api import auth, downloads, health, oauth, orders, products, webhooks
@@ -28,6 +29,17 @@ def create_app() -> FastAPI:
     app.include_router(downloads.router)
     app.include_router(webhooks.router)
     register_error_handlers(app)
+    # CORS для фронтенда: добавляем ПОСЛЕДНИМ, чтобы middleware стал самым внешним —
+    # иначе заголовки CORS не попадают в ответы об ошибках (в т.ч. от register_error_handlers),
+    # и браузер не сможет прочитать даже 4xx/5xx ответ с другого origin.
+    # allow_credentials не включаем: куки в проекте не используются (спека §5, единственная
+    # кука — временная state-кука OAuth-редиректа, к CORS-запросам фронтенда отношения не имеет).
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[get_settings().frontend_url],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     return app
 
 

@@ -17,6 +17,8 @@ class OrderCreateOut(BaseModel):
 class OrderItemOut(BaseModel):
     product_id: int
     price_at_purchase: int
+    product_name: str
+    download_token: str | None = None
 
 
 class OrderOut(BaseModel):

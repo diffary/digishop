@@ -1,7 +1,9 @@
+from datetime import UTC, datetime
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Order, OrderItem, Product
+from app.models import DownloadLink, Order, OrderItem, Product
 from app.payments.base import PaymentProvider
 
 
@@ -81,3 +83,48 @@ async def get_order(
     items_result = await session.execute(select(OrderItem).where(OrderItem.order_id == order.id))
     items = list(items_result.scalars().all())
     return order, items
+
+
+class OrderItemView:
+    """Плоское представление позиции заказа с именем товара и токеном скачивания."""
+
+    def __init__(self, item: OrderItem, product_name: str, download_token: str | None) -> None:
+        self.product_id = item.product_id
+        self.price_at_purchase = item.price_at_purchase
+        self.product_name = product_name
+        self.download_token = download_token
+
+
+async def build_item_views(session: AsyncSession, items: list[OrderItem]) -> list[OrderItemView]:
+    """Обогащает позиции заказа именем товара и (если есть непросроченная) токеном скачивания.
+
+    Ровно два запроса независимо от количества позиций — без N+1.
+    """
+    if not items:
+        return []
+
+    product_ids = {i.product_id for i in items}
+    products_result = await session.execute(select(Product).where(Product.id.in_(product_ids)))
+    names_by_product = {p.id: p.name for p in products_result.scalars().all()}
+
+    item_ids = [i.id for i in items]
+    links_result = await session.execute(
+        select(DownloadLink).where(DownloadLink.order_item_id.in_(item_ids))
+    )
+    now = datetime.now(UTC)
+    token_by_item: dict[int, str] = {}
+    for link in links_result.scalars().all():
+        expires_at = link.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        if expires_at > now:
+            token_by_item[link.order_item_id] = link.token
+
+    return [
+        OrderItemView(
+            item,
+            product_name=names_by_product.get(item.product_id, ""),
+            download_token=token_by_item.get(item.id),
+        )
+        for item in items
+    ]

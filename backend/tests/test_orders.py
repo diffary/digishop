@@ -1,6 +1,7 @@
 from sqlalchemy import select
 
-from app.models import Order, OrderItem, OrderStatus, Product
+from app.models import Order, OrderItem, OrderStatus, Product, User
+from app.services.delivery import deliver
 
 
 async def _product_ids(db_session, slugs):
@@ -149,3 +150,64 @@ async def test_get_order_by_id(auth_client, sample_data, fake_provider, db_sessi
 
     r = await auth_client.get("/orders/999999")
     assert r.status_code == 404
+
+
+async def test_cors_header_for_frontend_origin(client, sample_data):
+    r = await client.get("/products", headers={"Origin": "http://localhost:5173"})
+    assert r.status_code == 200
+    assert r.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+async def test_order_detail_includes_download_tokens_when_delivered(
+    auth_client, sample_data, db_session
+):
+    r = await auth_client.post(
+        "/auth/login", json={"email": "buyer@test.dev", "password": "pass12345"}
+    )
+    assert r.status_code == 200
+
+    products = await _product_ids(db_session, ["tank-pack-3d"])
+    tank = products["tank-pack-3d"]
+
+    user = (
+        (await db_session.execute(select(User).where(User.email == "buyer@test.dev")))
+        .scalars()
+        .one()
+    )
+
+    order = Order(user_id=user.id, status=OrderStatus.paid, total=tank.price, provider="stripe")
+    db_session.add(order)
+    await db_session.flush()
+
+    item = OrderItem(order_id=order.id, product_id=tank.id, price_at_purchase=tank.price)
+    db_session.add(item)
+    await db_session.commit()
+
+    await deliver(db_session, order.id)
+
+    r = await auth_client.get(f"/orders/{order.id}")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["items"]) == 1
+    item_out = body["items"][0]
+    assert item_out["product_name"] == "Tank Pack 3D"
+    assert isinstance(item_out["download_token"], str)
+    assert item_out["download_token"]
+
+
+async def test_order_detail_download_token_null_when_pending(
+    auth_client, sample_data, fake_provider, db_session
+):
+    products = await _product_ids(db_session, ["tank-pack-3d"])
+    tank_id = products["tank-pack-3d"].id
+
+    r = await auth_client.post("/orders", json={"product_ids": [tank_id]})
+    assert r.status_code == 201
+    order_id = r.json()["order_id"]
+
+    r = await auth_client.get(f"/orders/{order_id}")
+    assert r.status_code == 200
+    body = r.json()
+    item_out = body["items"][0]
+    assert item_out["download_token"] is None
+    assert item_out["product_name"] == "Tank Pack 3D"
