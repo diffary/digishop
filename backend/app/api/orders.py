@@ -39,27 +39,28 @@ async def create_order_endpoint(
 @router.get("", response_model=list[OrderOut])
 async def list_orders_endpoint(user: CurrentUser, session: SessionDep) -> list[OrderOut]:
     orders = await list_orders(session, user.id)
-    result = []
-    for order, items in orders:
-        views = await build_item_views(session, items)
-        result.append(
-            OrderOut(
-                id=order.id,
-                status=order.status,
-                total=order.total,
-                created_at=order.created_at,
-                items=[
-                    OrderItemOut(
-                        product_id=v.product_id,
-                        price_at_purchase=v.price_at_purchase,
-                        product_name=v.product_name,
-                        download_token=v.download_token,
-                    )
-                    for v in views
-                ],
+    # обогащение одним вызовом на ВСЕ позиции всех заказов (иначе N+1 по заказам)
+    all_items = [item for _, items in orders for item in items]
+    views_by_order: dict[int, list[OrderItemOut]] = {}
+    for v in await build_item_views(session, all_items):
+        views_by_order.setdefault(v.order_id, []).append(
+            OrderItemOut(
+                product_id=v.product_id,
+                price_at_purchase=v.price_at_purchase,
+                product_name=v.product_name,
+                download_token=v.download_token,
             )
         )
-    return result
+    return [
+        OrderOut(
+            id=order.id,
+            status=order.status,
+            total=order.total,
+            created_at=order.created_at,
+            items=views_by_order.get(order.id, []),
+        )
+        for order, _ in orders
+    ]
 
 
 @router.get("/{order_id}", response_model=OrderOut)

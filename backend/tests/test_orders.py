@@ -1,6 +1,6 @@
 from sqlalchemy import select
 
-from app.models import Order, OrderItem, OrderStatus, Product, User
+from app.models import DownloadLink, Order, OrderItem, OrderStatus, Product, User
 from app.services.delivery import deliver
 
 
@@ -161,11 +161,6 @@ async def test_cors_header_for_frontend_origin(client, sample_data):
 async def test_order_detail_includes_download_tokens_when_delivered(
     auth_client, sample_data, db_session
 ):
-    r = await auth_client.post(
-        "/auth/login", json={"email": "buyer@test.dev", "password": "pass12345"}
-    )
-    assert r.status_code == 200
-
     products = await _product_ids(db_session, ["tank-pack-3d"])
     tank = products["tank-pack-3d"]
 
@@ -191,8 +186,17 @@ async def test_order_detail_includes_download_tokens_when_delivered(
     assert len(body["items"]) == 1
     item_out = body["items"][0]
     assert item_out["product_name"] == "Tank Pack 3D"
-    assert isinstance(item_out["download_token"], str)
-    assert item_out["download_token"]
+    # токен обязан совпадать с реальным DownloadLink в БД, а не быть просто строкой
+    db_link = (
+        (
+            await db_session.execute(
+                select(DownloadLink).where(DownloadLink.order_item_id == item.id)
+            )
+        )
+        .scalars()
+        .one()
+    )
+    assert item_out["download_token"] == db_link.token
 
 
 async def test_order_detail_download_token_null_when_pending(

@@ -89,6 +89,7 @@ class OrderItemView:
     """Плоское представление позиции заказа с именем товара и токеном скачивания."""
 
     def __init__(self, item: OrderItem, product_name: str, download_token: str | None) -> None:
+        self.order_id = item.order_id
         self.product_id = item.product_id
         self.price_at_purchase = item.price_at_purchase
         self.product_name = product_name
