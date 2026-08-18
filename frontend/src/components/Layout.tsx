@@ -1,6 +1,11 @@
 import { Link, Outlet } from "react-router";
 
+import { useAuthStore } from "../stores/auth";
+
 export default function Layout() {
+  const email = useAuthStore((state) => state.email);
+  const logout = useAuthStore((state) => state.logout);
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900">
       <header className="bg-white border-b border-gray-200">
@@ -15,9 +20,21 @@ export default function Layout() {
             <Link to="/cart" className="hover:text-indigo-600">
               Корзина <span className="ml-1 rounded-full bg-indigo-600 text-white px-2 py-0.5 text-xs">0</span>
             </Link>
-            <Link to="/login" className="hover:text-indigo-600">
-              Войти
-            </Link>
+            {email ? (
+              <>
+                <Link to="/account" className="hover:text-indigo-600">
+                  Кабинет
+                </Link>
+                <span className="text-gray-500">{email}</span>
+                <button type="button" onClick={logout} className="hover:text-indigo-600">
+                  Выйти
+                </button>
+              </>
+            ) : (
+              <Link to="/login" className="hover:text-indigo-600">
+                Войти
+              </Link>
+            )}
           </nav>
         </div>
       </header>
