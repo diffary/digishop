@@ -37,7 +37,16 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     try {
       const body = await response.json();
       if (body && body.detail !== undefined) {
-        detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+        if (typeof body.detail === "string") {
+          detail = body.detail;
+        } else if (Array.isArray(body.detail)) {
+          detail = body.detail
+            .map((d: { msg?: string }) => d?.msg)
+            .filter(Boolean)
+            .join("; ") || JSON.stringify(body.detail);
+        } else {
+          detail = JSON.stringify(body.detail);
+        }
       }
     } catch {
       // no json body, keep statusText

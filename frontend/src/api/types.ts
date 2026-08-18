@@ -33,7 +33,7 @@ export interface OrderItemOut {
 
 export interface OrderOut {
   id: number;
-  status: string;
+  status: "pending" | "paid" | "delivered" | "failed";
   total: number;
   created_at: string;
   items: OrderItemOut[];

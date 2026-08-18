@@ -1,9 +1,9 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 
 import { AppRoutes } from "../App";
 import { useAuthStore } from "../stores/auth";
+import { renderWithProviders } from "./test-utils";
 
 beforeEach(() => {
   useAuthStore.setState({ token: null, email: null });
@@ -29,15 +29,13 @@ async function fillLoginForm(email: string, password: string) {
 
 test("успешный логин сохраняет токен и переходит на другую страницу", async () => {
   const mockFetch = fetch as unknown as ReturnType<typeof vi.fn>;
-  mockFetch.mockResolvedValueOnce(
-    jsonResponse(200, { access_token: "tok123", token_type: "bearer" }),
-  );
+  mockFetch.mockImplementation((url: string) => {
+    if (url.includes("/categories")) return Promise.resolve(jsonResponse(200, []));
+    if (url.includes("/products")) return Promise.resolve(jsonResponse(200, []));
+    return Promise.resolve(jsonResponse(200, { access_token: "tok123", token_type: "bearer" }));
+  });
 
-  render(
-    <MemoryRouter initialEntries={["/login"]}>
-      <AppRoutes />
-    </MemoryRouter>,
-  );
+  renderWithProviders(<AppRoutes />, { initialEntries: ["/login"] });
 
   await fillLoginForm("user@example.com", "password1");
 
@@ -53,11 +51,7 @@ test("логин с 401 показывает текст ошибки", async () 
   const mockFetch = fetch as unknown as ReturnType<typeof vi.fn>;
   mockFetch.mockResolvedValueOnce(jsonResponse(401, { detail: "Invalid credentials" }));
 
-  render(
-    <MemoryRouter initialEntries={["/login"]}>
-      <AppRoutes />
-    </MemoryRouter>,
-  );
+  renderWithProviders(<AppRoutes />, { initialEntries: ["/login"] });
 
   await fillLoginForm("user@example.com", "wrongpass");
 
@@ -70,11 +64,7 @@ test("регистрация делает запрос регистрации, �
     .mockResolvedValueOnce(jsonResponse(201, { id: 1, email: "new@example.com" }))
     .mockResolvedValueOnce(jsonResponse(200, { access_token: "tok456", token_type: "bearer" }));
 
-  render(
-    <MemoryRouter initialEntries={["/register"]}>
-      <AppRoutes />
-    </MemoryRouter>,
-  );
+  renderWithProviders(<AppRoutes />, { initialEntries: ["/register"] });
 
   fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "new@example.com" } });
   fireEvent.change(screen.getByLabelText(/пароль/i), { target: { value: "password1" } });
@@ -90,15 +80,14 @@ test("регистрация делает запрос регистрации, �
 
 test("Login читает location.state.from и перенаправляет туда после успеха", async () => {
   const mockFetch = fetch as unknown as ReturnType<typeof vi.fn>;
-  mockFetch.mockResolvedValueOnce(
-    jsonResponse(200, { access_token: "tok789", token_type: "bearer" }),
-  );
+  mockFetch.mockImplementation((url: string) => {
+    if (url.includes("/products")) return Promise.resolve(jsonResponse(200, []));
+    return Promise.resolve(jsonResponse(200, { access_token: "tok789", token_type: "bearer" }));
+  });
 
-  render(
-    <MemoryRouter initialEntries={[{ pathname: "/login", state: { from: "/cart" } }]}>
-      <AppRoutes />
-    </MemoryRouter>,
-  );
+  renderWithProviders(<AppRoutes />, {
+    initialEntries: [{ pathname: "/login", state: { from: "/cart" } }],
+  });
 
   await fillLoginForm("user@example.com", "password1");
 

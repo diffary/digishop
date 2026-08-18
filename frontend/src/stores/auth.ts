@@ -19,3 +19,5 @@ export const useAuthStore = create<AuthState>()(
     { name: "digishop-auth" },
   ),
 );
+
+export const useIsAuthed = () => useAuthStore((state) => state.token !== null);

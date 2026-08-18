@@ -1,6 +1,8 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router";
 
 import Layout from "./components/Layout";
+import { queryClient } from "./lib/query";
 import Account from "./pages/Account";
 import AuthCallback from "./pages/AuthCallback";
 import Cart from "./pages/Cart";
@@ -32,8 +34,10 @@ export function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }
