@@ -1,10 +1,13 @@
 import { Link, Outlet } from "react-router";
 
-import { useAuthStore } from "../stores/auth";
+import { useCartCount } from "../stores/cart";
+import { useAuthStore, useIsAuthed } from "../stores/auth";
 
 export default function Layout() {
   const email = useAuthStore((state) => state.email);
   const logout = useAuthStore((state) => state.logout);
+  const isAuthed = useIsAuthed();
+  const cartCount = useCartCount();
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900">
@@ -18,14 +21,17 @@ export default function Layout() {
               Каталог
             </Link>
             <Link to="/cart" className="hover:text-indigo-600">
-              Корзина <span className="ml-1 rounded-full bg-indigo-600 text-white px-2 py-0.5 text-xs">0</span>
+              Корзина{" "}
+              <span className="ml-1 rounded-full bg-indigo-600 text-white px-2 py-0.5 text-xs">
+                {cartCount}
+              </span>
             </Link>
-            {email ? (
+            {isAuthed ? (
               <>
                 <Link to="/account" className="hover:text-indigo-600">
                   Кабинет
                 </Link>
-                <span className="text-gray-500">{email}</span>
+                {email && <span className="text-gray-500">{email}</span>}
                 <button type="button" onClick={logout} className="hover:text-indigo-600">
                   Выйти
                 </button>

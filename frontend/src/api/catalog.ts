@@ -26,6 +26,6 @@ export function useProduct(slug: string) {
   return useQuery({
     queryKey: ["product", slug],
     queryFn: () => get<ProductOut>(`/products/${slug}`),
-    retry: false,
+    enabled: !!slug,
   });
 }

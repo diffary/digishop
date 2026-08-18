@@ -3,10 +3,15 @@ import { Link, useParams } from "react-router";
 import { useProduct } from "../api/catalog";
 import { ApiError } from "../api/client";
 import { formatPrice } from "../lib/format";
+import { useCartStore } from "../stores/cart";
 
 export default function Product() {
   const { slug = "" } = useParams();
   const { data: product, isLoading, error } = useProduct(slug);
+  const add = useCartStore((state) => state.add);
+  const inCart = useCartStore((state) =>
+    product ? state.items.some((i) => i.productId === product.id) : false,
+  );
 
   if (isLoading) {
     return <p className="text-gray-500">Загрузка...</p>;
@@ -37,10 +42,13 @@ export default function Product() {
       <p className="text-xl font-semibold text-indigo-600 mt-4">{formatPrice(product.price)}</p>
       <button
         type="button"
-        onClick={() => console.log("add to cart")}
-        className="mt-6 bg-indigo-600 text-white px-6 py-3 rounded font-medium hover:bg-indigo-700"
+        disabled={inCart}
+        onClick={() =>
+          add({ productId: product.id, slug: product.slug, name: product.name, price: product.price })
+        }
+        className="mt-6 bg-indigo-600 text-white px-6 py-3 rounded font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        В корзину
+        {inCart ? "В корзине ✓" : "В корзину"}
       </button>
     </div>
   );

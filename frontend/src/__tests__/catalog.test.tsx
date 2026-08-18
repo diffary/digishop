@@ -2,17 +2,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 
 import { AppRoutes } from "../App";
-import { renderWithProviders } from "./test-utils";
-
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    statusText: "Error",
-    json: async () => body,
-    text: async () => JSON.stringify(body),
-  } as Response;
-}
+import { jsonResponse, renderWithProviders } from "./test-utils";
 
 const products = [
   {
@@ -73,25 +63,27 @@ test("смена категории вызывает fetch с параметро
 
 test("поиск с дебаунсом вызывает fetch с параметром search", async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
-  const mockFetch = mockCatalogFetch();
+  try {
+    const mockFetch = mockCatalogFetch();
 
-  renderWithProviders(<AppRoutes />, { initialEntries: ["/"] });
+    renderWithProviders(<AppRoutes />, { initialEntries: ["/"] });
 
-  await vi.waitFor(() => screen.getByText("Tank Pack 3D"));
+    await vi.waitFor(() => screen.getByText("Tank Pack 3D"));
 
-  fireEvent.change(screen.getByPlaceholderText("Поиск..."), { target: { value: "tank" } });
+    fireEvent.change(screen.getByPlaceholderText("Поиск..."), { target: { value: "tank" } });
 
-  await vi.advanceTimersByTimeAsync(350);
+    await vi.advanceTimersByTimeAsync(350);
 
-  await vi.waitFor(() => {
-    if (
-      !mockFetch.mock.calls.some((call) => String(call[0]).includes("search=tank"))
-    ) {
-      throw new Error("not called yet");
-    }
-  });
-
-  vi.useRealTimers();
+    await vi.waitFor(() => {
+      if (
+        !mockFetch.mock.calls.some((call) => String(call[0]).includes("search=tank"))
+      ) {
+        throw new Error("not called yet");
+      }
+    });
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("пустой список товаров показывает сообщение", async () => {

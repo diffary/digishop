@@ -45,7 +45,7 @@ export default function Catalog() {
       </div>
 
       {isLoading && <p className="text-gray-500">Загрузка...</p>}
-      {error && <p className="text-red-600">Не удалось загрузить каталог</p>}
+      {error && !products && <p className="text-red-600">Не удалось загрузить каталог</p>}
       {!isLoading && !error && products && products.length === 0 && (
         <p className="text-gray-500">Ничего не найдено</p>
       )}

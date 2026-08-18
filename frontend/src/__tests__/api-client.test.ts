@@ -2,22 +2,13 @@ import { beforeEach, expect, test, vi } from "vitest";
 
 import { ApiError, get, post } from "../api/client";
 import { useAuthStore } from "../stores/auth";
+import { jsonResponse } from "./test-utils";
 
 beforeEach(() => {
   useAuthStore.setState({ token: null, email: null });
   localStorage.clear();
   vi.stubGlobal("fetch", vi.fn());
 });
-
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    statusText: "Error",
-    json: async () => body,
-    text: async () => JSON.stringify(body),
-  } as Response;
-}
 
 test("get вызывает fetch с базовым URL и парсит json", async () => {
   const mockFetch = fetch as unknown as ReturnType<typeof vi.fn>;

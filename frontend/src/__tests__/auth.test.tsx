@@ -3,23 +3,13 @@ import { beforeEach, expect, test, vi } from "vitest";
 
 import { AppRoutes } from "../App";
 import { useAuthStore } from "../stores/auth";
-import { renderWithProviders } from "./test-utils";
+import { jsonResponse, renderWithProviders } from "./test-utils";
 
 beforeEach(() => {
   useAuthStore.setState({ token: null, email: null });
   localStorage.clear();
   vi.stubGlobal("fetch", vi.fn());
 });
-
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    statusText: "Error",
-    json: async () => body,
-    text: async () => JSON.stringify(body),
-  } as Response;
-}
 
 async function fillLoginForm(email: string, password: string) {
   fireEvent.change(screen.getByLabelText(/email/i), { target: { value: email } });
