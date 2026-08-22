@@ -12,6 +12,10 @@ export async function createOrder(productIds: number[]) {
   return post<OrderCreateOut>("/orders", { product_ids: productIds });
 }
 
+export function useMyOrders() {
+  return useQuery({ queryKey: ["orders", "my"], queryFn: () => get<OrderOut[]>("/orders/my") });
+}
+
 export function useOrder(
   orderId: number,
   opts?: { poll?: boolean; onPoll?: () => boolean },

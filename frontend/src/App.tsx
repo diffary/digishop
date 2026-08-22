@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router";
 
 import Layout from "./components/Layout";
 import { queryClient } from "./lib/query";
+import RequireAuth from "./components/RequireAuth";
 import Account from "./pages/Account";
 import AuthCallback from "./pages/AuthCallback";
 import Cart from "./pages/Cart";
@@ -23,7 +24,14 @@ export function AppRoutes() {
         <Route path="/cart" element={<Cart />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/account" element={<Account />} />
+        <Route
+          path="/account"
+          element={
+            <RequireAuth>
+              <Account />
+            </RequireAuth>
+          }
+        />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/order/success" element={<OrderSuccess />} />
         <Route path="/order/cancel" element={<OrderCancel />} />
