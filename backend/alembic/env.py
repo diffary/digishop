@@ -25,6 +25,16 @@ config.set_main_option("sqlalchemy.url", get_settings().database_url)
 # for 'autogenerate' support
 target_metadata = Base.metadata
 
+
+def include_object(obj, name, type_, reflected, compare_to):
+    """Ignore tables Alembic doesn't own (e.g. Django's django_*/auth_* tables).
+
+    Without this, autogenerate reflects tables absent from our metadata and
+    proposes DROPping them. The admin panel's own migrations own those tables.
+    """
+    return not (type_ == "table" and reflected and compare_to is None)
+
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -49,6 +59,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -56,7 +67,11 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        include_object=include_object,
+    )
 
     with context.begin_transaction():
         context.run_migrations()

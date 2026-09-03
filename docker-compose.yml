@@ -47,5 +47,18 @@ services:
     depends_on:
       redis: {condition: service_started}
 
+  admin:
+    build: ./admin_panel
+    environment:
+      DATABASE_URL: postgresql://digishop:digishop@postgres:5432/digishop
+      DJANGO_SECRET_KEY: dev-only-secret-key
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      DJANGO_SUPERUSER_USERNAME: admin
+      DJANGO_SUPERUSER_EMAIL: admin@example.com
+      DJANGO_SUPERUSER_PASSWORD: admin
+    ports: ["8001:8001"]
+    depends_on:
+      postgres: {condition: service_healthy}
+
 volumes:
   pgdata:
