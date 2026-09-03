@@ -1,0 +1,23 @@
+[project]
+name = "admin-panel"
+version = "0.1.0"
+description = "DigiShop back-office (Django admin over the shared PostgreSQL database)"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=6.1.1",
+    "gunicorn>=26.2.0",
+    "psycopg[binary]>=3.3.5",
+    "whitenoise>=6.12.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.5",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+extend-select = ["I"]
