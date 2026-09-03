@@ -30,7 +30,7 @@ test("после логина с /account редиректит обратно в
       if (String(url).includes("/auth/login")) {
         return Promise.resolve(jsonResponse(200, { access_token: "tok", token_type: "bearer" }));
       }
-      if (String(url).includes("/orders/my")) {
+      if (String(url).endsWith("/orders")) {
         return Promise.resolve(jsonResponse(200, []));
       }
       return Promise.resolve(jsonResponse(200, {}));

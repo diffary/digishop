@@ -13,7 +13,7 @@ export async function createOrder(productIds: number[]) {
 }
 
 export function useMyOrders() {
-  return useQuery({ queryKey: ["orders", "my"], queryFn: () => get<OrderOut[]>("/orders/my") });
+  return useQuery({ queryKey: ["orders", "my"], queryFn: () => get<OrderOut[]>("/orders") });
 }
 
 export function useOrder(

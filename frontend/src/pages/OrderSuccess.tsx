@@ -1,20 +1,30 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { API_URL } from "../api/client";
 import { useOrder } from "../api/orders";
 
-const MAX_POLLS = 30; // ~60 секунд по 2с — дальше отправляем юзера в кабинет
+// Лимит ожидания в мс: дальше отправляем юзера в кабинет.
+// Именно время, а не счётчик вызовов: refetchInterval-колбэк TanStack
+// дёргается чаще, чем реально уходят запросы (mount, оба апдейта цикла).
+const POLL_BUDGET_MS = 60_000;
 
 export default function OrderSuccess() {
   const [searchParams] = useSearchParams();
   const orderId = Number(searchParams.get("order_id"));
-  const polls = useRef(0);
+  // capped — React-state, а не ref: остановка поллинга сама по себе
+  // не перерисовывает компонент (payload не меняется — structural sharing
+  // не уведомляет подписчиков), поэтому смену сообщения форсируем setState'ом.
+  const [capped, setCapped] = useState(false);
+  const startedAt = useRef(Date.now());
   const { data: order, isLoading, error } = useOrder(orderId, {
-    poll: true,
+    poll: !capped,
     onPoll: () => {
-      polls.current += 1;
-      return polls.current < MAX_POLLS;
+      if (Date.now() - startedAt.current > POLL_BUDGET_MS) {
+        setCapped(true);
+        return false;
+      }
+      return true;
     },
   });
 
@@ -44,7 +54,6 @@ export default function OrderSuccess() {
   }
 
   if (order.status === "pending" || order.status === "paid") {
-    const capped = polls.current >= MAX_POLLS;
     return (
       <div>
         <h1 className="text-2xl font-semibold mb-4">Заказ №{order.id}</h1>

@@ -172,6 +172,35 @@ test("OrderSuccess: failed показывает ошибку оплаты и с�
   expect(screen.getByRole("link", { name: "В каталог" })).toBeInTheDocument();
 });
 
+test("OrderSuccess: после 60 секунд pending показывает «загляните позже»", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          id: 1,
+          status: "pending",
+          total: 1999,
+          created_at: "2026-08-19T00:00:00Z",
+          items: [],
+        }),
+      ),
+    );
+
+    renderWithProviders(<AppRoutes />, { initialEntries: ["/order/success?order_id=1"] });
+    expect(await screen.findByText("Ждём подтверждение оплаты…")).toBeInTheDocument();
+
+    // прыгаем за бюджет ожидания и даём интервалу поллинга сработать
+    await vi.advanceTimersByTimeAsync(61_000);
+
+    expect(await screen.findByText(/загляните в/)).toBeInTheDocument();
+    expect(screen.queryByText("Ждём подтверждение оплаты…")).not.toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("OrderCancel рендерит текст отмены и ссылку в кабинет", () => {
   renderWithProviders(<AppRoutes />, { initialEntries: ["/order/cancel"] });
 
